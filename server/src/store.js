@@ -1,9 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const filePath = join(root, 'data', 'filings.json');
+import { MongoClient } from 'mongodb';
 
 const seed = [
   { id: 'gst-sep', title: 'GSTR-3B · September', type: 'GST', dueDate: '2026-10-20', status: 'upcoming', assignee: 'Aditi Sharma', notes: 'Reconcile purchase register before filing.' },
@@ -13,19 +8,26 @@ const seed = [
   { id: 'tds-q1', title: 'TDS Return · Q1', type: 'TDS', dueDate: '2026-07-31', status: 'completed', assignee: 'Rahul Mehta', notes: 'Acknowledgement received.' }
 ];
 
-function ensureFile() {
-  if (!existsSync(filePath)) {
-    mkdirSync(dirname(filePath), { recursive: true });
-    writeFileSync(filePath, JSON.stringify(seed, null, 2));
-  }
+let collection;
+
+export async function connectDatabase() {
+  const client = new MongoClient(process.env.MONGODB_URI);
+  await client.connect();
+  collection = client.db().collection('filings');
+  await collection.createIndex({ id: 1 }, { unique: true });
+  if (await collection.countDocuments() === 0) await collection.insertMany(seed);
+  console.log('Connected to MongoDB Atlas');
 }
 
-export function getFilings() {
-  ensureFile();
-  return JSON.parse(readFileSync(filePath, 'utf8'));
+export async function getFilings() {
+  return collection.find({}, { projection: { _id: 0 } }).sort({ dueDate: 1 }).toArray();
 }
 
-export function saveFilings(filings) {
-  ensureFile();
-  writeFileSync(filePath, JSON.stringify(filings, null, 2));
+export async function createFiling(filing) {
+  await collection.insertOne(filing);
+  return filing;
+}
+
+export async function updateFiling(id, changes) {
+  return collection.findOneAndUpdate({ id }, { $set: changes }, { returnDocument: 'after', projection: { _id: 0 } });
 }
