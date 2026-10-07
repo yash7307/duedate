@@ -2,3 +2,6 @@ node_modules
 dist
 .env
 server/data/filings.json
+coverage
+test-results
+playwright-report
